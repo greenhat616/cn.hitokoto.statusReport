@@ -65,6 +65,11 @@ namespace cn.hitokoto.statusReport.Drivers.Monitor {
             return dt;
         }
 
+        public static long ConvertDateTimeToTimeStamp(DateTime time) {
+            System.DateTime startTime = TimeZone.CurrentTimeZone.ToLocalTime(new System.DateTime(1970, 1, 1, 0, 0, 0, 0));
+            long t = (time.Ticks - startTime.Ticks) / 10000;   //除10000调整为13位      
+            return t;
+        }
         static public string gernerateDataStatistics() { // 读取数据库， 分析监控数据
             Logger.Debug("开始生成数据统计。");
             var context = new StatisticsContext();
@@ -81,8 +86,8 @@ namespace cn.hitokoto.statusReport.Drivers.Monitor {
                     // 计算持续时间
                     DateTime startTime = ConvertTimeStampToDateTime(downServer.startTS);
                     TimeSpan distance = now - startTime;
-                    string last = distance.Days + "天" + distance.Hours + "时" + distance.Minutes + "分" + distance.Seconds + "秒";
-                    string part = "标识: " + downServer.id + " -> 故障开始时间: " + startTime.ToString("s") + ", 已持续: " + last;
+                    string last = distance.Days + " 天 " + distance.Hours + " 时 " + distance.Minutes + " 分 " + distance.Seconds + " 秒 ";
+                    string part = "标识: " + downServer.id + " -> 触发时间: " + startTime.ToString("s") + ", 已持续: " + last;
                     result += part + "\r\n";
                     Logger.Debug("生成数据统计 -> " + part);
                 }
@@ -257,6 +262,7 @@ namespace cn.hitokoto.statusReport.Drivers.Monitor {
                     // 首先检测一下此 id 是否存在
                     var ids = downServerIds.ToArray();
                     if (Array.IndexOf(ids, downServer.id) == -1) { // 如果不存在， 那么就开始通知流程
+                        addLog(downServer.id, "down", downServer.startTs); // 添加故障日志
                         Logger.Debug("标识:" + downServer.id + "， 初次发现宕机， 开始通知流程。");
                         // 首先，初始化 down
                         var child = new down() {
@@ -341,7 +347,8 @@ namespace cn.hitokoto.statusReport.Drivers.Monitor {
                     // 获取持续时间
                     var now = DateTime.Now;
                     var distance = now - startTime;
-                    var last = distance.Days + "天" + distance.Hours + "时" + distance.Minutes + "分" + distance.Seconds + "秒";
+                    var last = distance.Days + " 天 " + distance.Hours + " 时 " + distance.Minutes + " 分 " + distance.Seconds + " 秒 ";
+                    addLog(id, "up", ConvertDateTimeToTimeStamp(now));
 
                     Logger.Debug("标识:" + id + " -> 开始读取配置项， 并执行配置映射。");
                     // 读取配置
@@ -387,7 +394,7 @@ namespace cn.hitokoto.statusReport.Drivers.Monitor {
                     Logger.Debug("标识:" + id + " -> 同步任务已经完成， 请等待异步程序执行完毕。");
                 }
             }
-
+            dumpData();
         }
 
         public void stopTimer() {

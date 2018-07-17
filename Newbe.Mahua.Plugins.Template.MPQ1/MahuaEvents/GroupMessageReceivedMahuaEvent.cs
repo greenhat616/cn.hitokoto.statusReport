@@ -85,6 +85,8 @@ namespace Newbe.Mahua.Plugins.Template.MPQ1.MahuaEvents {
                 if (context.Message == "汇报监控状态") {
                     _mahuaApi
                         .SendGroupMessage(context.FromGroup)
+                        .At(context.FromQq)
+                        .Newline()
                         .Text(monitor.gernerateDataStatistics())
                         .Done();
                 }
