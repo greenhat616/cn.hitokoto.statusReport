@@ -10,8 +10,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using IniParser;
 using IniParser.Model;
-using System.Net;
-using System.Net.Mail;
+using MailKit.Net.Smtp;
+using MimeKit;
 
 namespace Newbe.Mahua.Plugins.Template.MPQ1 {
     public partial class settingForm : Form {
@@ -107,17 +107,19 @@ namespace Newbe.Mahua.Plugins.Template.MPQ1 {
             string username = textBox4.Text;
             string password = textBox5.Text;
             bool enableSSL = checkBox1.Checked;
-            MailMessage mail = new MailMessage();
-            mail.From = new MailAddress(username);
-            mail.To.Add("i@a632079.me");
+            var mail = new MimeMessage();
+            mail.From.Add(new MailboxAddress(username));
+            mail.To.Add(new MailboxAddress("a632079@qq.com"));
             mail.Subject = "Test Connection";
-            mail.Body = "Just Test Mail Connection";
-            mail.IsBodyHtml = false;
+            mail.Body = new TextPart("plain") {
+                Text = "Just Test Mail Connection"
+            };
             try {
-                SmtpClient smtp = new SmtpClient(host, port);
-                smtp.Credentials = new NetworkCredential(username, password);
-                smtp.EnableSsl = enableSSL;
-                smtp.Send(mail);
+                var client = new SmtpClient();
+                client.ServerCertificateValidationCallback = (s, c, h, a) => true;
+                client.Connect(host, port, enableSSL);
+                client.Authenticate(username, password);
+                client.Send(mail);
                 MessageBox.Show("连接成功");
             } catch (ArgumentException err) {
                 MessageBox.Show("连接失败， 错误信息请查看错误堆栈！");

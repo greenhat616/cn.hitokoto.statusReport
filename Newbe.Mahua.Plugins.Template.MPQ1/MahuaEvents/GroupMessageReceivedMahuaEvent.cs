@@ -1,12 +1,19 @@
 ﻿using Newbe.Mahua.MahuaEvents;
+using Newbe.Mahua.Logging;
 using System;
-using System.Threading.Tasks;
 using System.IO;
 using System.Net;
+using System.Linq;
+using System.Timers;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using IniParser;
 using IniParser.Model;
-namespace Newbe.Mahua.Plugins.Template.MPQ1.MahuaEvents {
+
+using cn.hitokoto.statusReport.Drivers.Monitor;
+
+namespace Newbe.Mahua.Plugins.Template.MPQ1.MahuaEvents {  
     public class hitokotoConstruct {
         public uint id { set; get; }
         public string hitokoto { set; get; }
@@ -19,12 +26,14 @@ namespace Newbe.Mahua.Plugins.Template.MPQ1.MahuaEvents {
     public class TimerStart {
         static public bool TimerIsStart = false;
     }
+
     /// <summary>
     /// 群消息接收事件
     /// </summary>
     public class GroupMessageReceivedMahuaEvent : IGroupMessageReceivedMahuaEvent {
         private readonly IMahuaApi _mahuaApi;
-        protected bool TimerIsStart;
+        static monitor monitor;
+        private static readonly ILog Logger = LogProvider.GetLogger(typeof(GroupMessageReceivedMahuaEvent));
         protected uint[] adminList = new uint[5] {
             1943241505, // a632079
             342119543, // 飘飘
@@ -38,26 +47,48 @@ namespace Newbe.Mahua.Plugins.Template.MPQ1.MahuaEvents {
         }
 
         public void StartTimer(string uri, int tickTime) {
-
+            Logger.Debug("开始尝试激活定时器。");
+            monitor = new monitor(uri, tickTime);
             TimerStart.TimerIsStart = true;
         }
 
-        public void ShutdownTimer() {
 
+        public void ShutdownTimer () {
+            monitor.stopTimer();
+            monitor = null;
             TimerStart.TimerIsStart = false;
         }
 
-        public string fetchHitokotoText() {
+        static public string fetchHitokotoText () {
+            Logger.Debug("开始尝试获取一言文本。");
             var request = (HttpWebRequest)WebRequest.Create("https://v1.hitokoto.cn/?encode=json");
             var response = (HttpWebResponse)request.GetResponse();
             var responseString = new StreamReader(response.GetResponseStream()).ReadToEnd();
             var data = JsonConvert.DeserializeObject<hitokotoConstruct>(responseString);
+            Logger.Debug("已获取到一言文本。" + data.hitokoto);
             return data.hitokoto;
         }
-        public void ProcessGroupMessage(GroupMessageReceivedContext context) {
+        public void ProcessGroupMessage (GroupMessageReceivedContext context) {
+            // Ping - Pong
+            if (context.Message == "/ping") {
+                _mahuaApi
+                    .SendGroupMessage(context.FromGroup)
+                    .At(context.FromQq)
+                    .Newline()
+                    .Text("Pong")
+                    .Done();
+            }
+
             // 初始化计时器
             int id = Array.IndexOf(adminList, uint.Parse(context.FromQq));
             if (id > -1) { // 如果是机器人管理员
+                if (context.Message == "汇报监控状态") {
+                    _mahuaApi
+                        .SendGroupMessage(context.FromGroup)
+                        .Text(monitor.gernerateDataStatistics())
+                        .Done();
+                }
+
                 if ((context.Message).ToString() == "启动状态监控") { // 由管理员发起启动指令， 然么启动循环计时器
                     string workDir = System.AppDomain.CurrentDomain.BaseDirectory; // 获取程序目录
                     string pluginConfigDir = workDir + "/Plugin/Config";
@@ -90,6 +121,8 @@ namespace Newbe.Mahua.Plugins.Template.MPQ1.MahuaEvents {
                                 uri = monitor["uri"] == "" ? "https://status.hitokoto.cn" : monitor["uri"];
                                 StartTimer(uri, timeTick);
                             } catch (Exception err) {
+                                Logger.Error(err.Message);
+                                Logger.Debug("读取配置项失败， 开始使用默认配置激活计时器");
                                 uri = "https://status.hitokoto.cn";
                                 timeTick = 500;
 
@@ -124,6 +157,7 @@ namespace Newbe.Mahua.Plugins.Template.MPQ1.MahuaEvents {
                     }
                 } else if ((context.Message).ToString() == "停止状态监控") { // 由管理员发起启动指令， 然么终止循环计时器
                     if (!TimerStart.TimerIsStart) {
+                        Logger.Debug("触发事件: 停止状态监控。 目前状态: 已停止。无操作。");
                         _mahuaApi.SendGroupMessage(context.FromGroup)
                             .At(context.FromQq)
                             .Newline()
@@ -134,6 +168,7 @@ namespace Newbe.Mahua.Plugins.Template.MPQ1.MahuaEvents {
                             .Text("现在时间: " + DateTime.Now.ToString("s"))
                             .Done();
                     } else {
+                        Logger.Debug("触发事件: 停止状态监控。 目前状态: 运行中。 停止状态监控。");
                         ShutdownTimer();
                         _mahuaApi.SendGroupMessage(context.FromGroup)
                             .At(context.FromQq)
