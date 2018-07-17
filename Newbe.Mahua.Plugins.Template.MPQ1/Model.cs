@@ -8,6 +8,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace cn.hitokoto.statusReport.DbModels {
     public class StatisticsContext : DbContext {
+        static string workDir = System.AppDomain.CurrentDomain.BaseDirectory; // 获取程序目录
+        static string databaseDir = workDir + "/database";
+        static string DBFile = databaseDir + "/Statistics.db";
 
         public DbSet<status> Status { get; set; }
         public DbSet<log> Log { get; set; }
@@ -21,7 +24,8 @@ namespace cn.hitokoto.statusReport.DbModels {
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {
-            optionsBuilder.UseSqlite(@"Data Source=./Statistics.db");
+            // optionsBuilder.UseSqlite(@"Data Source=Statistics.db");
+            optionsBuilder.UseSqlite(@"Data Source=" + DBFile);
         }
     }
     public class log {
